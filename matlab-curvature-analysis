@@ -1,0 +1,121 @@
+ir_a =  xy_trajectory2(:,3)+0.5;  %% xy_trajectory2(:,3) is Z coordinate
+ir_b = xy_trajectory2(:,3)-0.5;
+ir_c = xy_trajectory2(:,3)-1;
+
+ir_a = xy_trajectory2(:,3)+0.5;
+ir_b = xy_trajectory2(:,3)-0.5;
+ir_c = xy_trajectory2(:,3)-1;
+
+%% ------------plot trajectory of the end-effector 
+figure, plot3(xy_trajectory2(:,4),xy_trajectory2(:,5),xy_trajectory2(:,3))
+xlabel('x, cm','fontsize',20)
+ylabel('y, cm','fontsize',20)
+zlabel('z, cm','fontsize',20)
+axis([-20 20 0 45 -5 20])
+grid on
+grid minor
+set(gca,'fontsize',10)
+hold on
+
+%% -------------find the index of the IR sensor and plot them on trajectory
+a_index = find(xy_trajectory2(:,7) < 2.5);
+b_index = find(xy_trajectory2(:,8) < 3);
+c_index = find(xy_trajectory2(:,9) < 2.5);
+
+plot3(xy_trajectory2(:,4),xy_trajectory2(:,5),ir_a,'o','MarkerIndices',[a_index],'MarkerFaceColor','red','MarkerSize',10)
+plot3(xy_trajectory2(:,4),xy_trajectory2(:,5),ir_b,'o','MarkerIndices',[b_index],'MarkerFaceColor','blue','MarkerSize',10)
+plot3(xy_trajectory2(:,4),xy_trajectory2(:,5),ir_c,'o','MarkerIndices',[c_index],'MarkerFaceColor','green','MarkerSize',10)
+
+%%-----quadratic
+syms x;
+x1=xy_trajectory2(:,4);
+y1=xy_trajectory2(:,5);
+%%---------------plot the trajectory------------------
+
+plot(lastest1(:,4),lastest1(:,5),'linewidth',1)
+xlabel('x, cm','fontsize',20)
+ylabel('y, cm','fontsize',20)
+axis equal
+grid on
+x=lastest1(:,4);
+y=lastest1(:,5);
+
+%% lsqcurvefit is nonlinear regression
+constant = lsqcurvefit(@f2,[0;0;0],x,y);
+a = constant(1)
+b = constant(2)
+c = constant(3)
+xfit = -8:0.1:8;
+yfit = f2(constant,xfit);
+%% polyfit is linear regression
+p = polyfit(x,y,4);
+x1 = linspace(-8,8);
+f1 = polyval(p,x1);
+%plot(x,y)
+%plot(x1,f1,'r--')
+%xfit = x1;
+%yfit = f1;
+
+plot(xfit,yfit,'r','linewidth',1)
+grid on
+%% the curvature analysis for a circle
+for i=1:1:length(xfit)-2
+Ac(i)=(xfit(i)-xfit(i+1))/(yfit(i+1)-yfit(i))
+Bc(i)= (xfit(i)^2-xfit(i+1)^2)/(2*(yfit(i+1)-yfit(i)));
+Cc(i)= (yfit(i)^2-yfit(i+1)^2)/(2*(yfit(i+1)-yfit(i)));    
+Ac1(i)=(xfit(i+1)-xfit(i+2))/(yfit(i+2)-yfit(i+1))
+Bc1(i)= (xfit(i+1)^2-xfit(i+2)^2)/(2*(yfit(i+2)-yfit(i+1)));
+Cc1(i)= (yfit(i+1)^2-yfit(i+2)^2)/(2*(yfit(i+2)-yfit(i+1)));    
+
+xc(i)   = -((Bc(i)+Cc(i))-(Bc1(i)+Cc1(i)))*(1/(Ac1(i)-Ac(i))); 
+yc(i) =    -((1/((1/Ac(i))-(1/(Ac1(i)))))*(  (Bc(i)+Cc(i))*(1/Ac(i))-(Bc1(i)+Cc1(i))*(1/Ac1(i))));
+end
+
+xc_ave= mean(xc); %% the average of the centre of x
+yc_ave= mean(yc); %% the average of the centre of y
+
+radius = sqrt(( xfit(1)-xc_ave)^2+(yfit(1)-yc_ave)^2);
+
+x2 = xfit;
+y2 = yfit;
+X = [x2',y2'];
+
+%% plot the estimated circle
+r=24.9514; % radius  
+C=[0.7652 41.5294];
+theta=0:2*pi/360:2*pi; % the angle
+m=[r*cos(theta')+C(1) r*sin(theta')+C(2)]; % the points you asked
+figure,plot(m(:,1), m(:,2), '--')
+hold on
+plot(C(1),C(2),'+','MarkerEdgeColor','blue','MarkerSize',10 )
+%% plot the reference circle
+r1=10; % radius
+C1=[0 42];
+theta1=0:2*pi/360:2*pi; % the angle
+
+m1=[r1*cos(theta1')+C1(1) r1*sin(theta1')+C1(2)]; % the points you asked
+
+plot(m1(:,1), m1(:,2))
+center1= [ 0 42];
+plot(center1(1),center1(2),'*','MarkerEdgeColor','black','MarkerSize',10 )
+%% plot the true value----------------------------
+r2=24; % radius
+C2=[0 42];
+theta2=0:2*pi/360:2*pi; % the angle
+
+m2=[r2*cos(theta1')+C2(1) r2*sin(theta1')+C2(2)]; % the points you asked
+
+plot(m2(:,1), m2(:,2))
+
+%% plot the 3d cylinder------------------------------------
+r= 10.794;
+[X,Y,Z] = cylinder(r);
+hh = 30;
+Z = Z*hh;
+%surf(X+1,Y,Z)
+trans = zeros(2,21);
+surf(X+0.7652,Y+41.5294,Z-5,'AlphaData',trans,'FaceAlpha','flat','FaceColor','blue');
+%axis([-5 5 -5 5 0 5])
+center= [ 0.7652  41.5294];
+plot(center(1),center(2),'*','MarkerEdgeColor','blue','MarkerSize',10 )
+
