@@ -1,0 +1,572 @@
+#include <math.h>
+#include <Servo.h>
+#include <Wire.h>
+#include <VL53L0X.h>
+#define  M_PI  3.141592
+
+VL53L0X sensor;
+VL53L0X sensor2;
+VL53L0X sensor3;
+int ir_start=0;
+int g;
+int h;
+
+float a;
+float b;
+float c;
+
+float x_check;
+float y_check;
+float virtual_x;
+float virtual_y;
+
+
+const int numReadings = 5; //smoothing
+const int numReadings_ir = 3;
+
+int readings1[numReadings];      // the readings from the analog input
+int readings2[numReadings];
+int readings3[numReadings];
+
+float readings1_ir[numReadings_ir];
+float readings2_ir[numReadings_ir];
+float readings3_ir[numReadings_ir];
+
+
+int readIndex = 0;              // the index of the current reading
+int readIndex2 = 0;
+int readIndex3 = 0;
+
+int readindex_ir = 0;      // the index of the current reading
+int readindex2_ir = 0;
+int readindex3_ir = 0;
+
+float total1 = 0;                  // the running total
+float total2 = 0; 
+float total3= 0; 
+float average1 = 0;                // the average
+float average2 = 0;
+float average3 = 0;
+
+float total1_ir =0;
+float total2_ir =0;
+float total3_ir =0;
+float average1_ir =0;
+float average2_ir =0;
+float average3_ir =0;
+
+float ir1;
+float ir_sensor1;
+float ir2;
+float ir_sensor2;
+float ir3;
+float ir_sensor3;
+
+float ir1_ave;
+float ir2_ave;
+float ir3_ave;
+
+//-- pid
+float joint1 = 0;
+float distance1;
+float distance2;
+float distance3;
+float last_error=0;
+float new_error=0;
+float error =0 ;
+float derivative =0;
+float integral =0;
+
+//inverse
+double px;
+double py;
+double pz;
+
+double theta1 = 0;
+double theta2 = 0;
+double theta3 = 0;
+
+double real_theta1;
+double real_theta2;
+double real_theta3;
+double test_theta1;
+
+ double x =0,y=8, z=10;
+int d1= 11;
+int a1=0;
+double a2=15;
+double a3=15;
+int motion_plan = 0;
+double rad_joint1;
+//-----
+
+Servo myservo1;
+Servo myservo2;
+Servo myservo3;
+Servo myservo4;
+Servo myservo5;
+Servo myservo6;
+
+int servoPins1 = 3; 
+int servoPins2 = 4;
+int servoPins3 = 5;
+int servoPins4 = 6;
+int servoPins5 = 7;
+int servoPins6 = 8;
+
+int val;
+float val1 ;
+float val2 ;
+float val3 ;
+float val4 ;
+float val5 ;
+float val6 ;
+
+
+void setup() {
+pinMode(11, OUTPUT);
+pinMode(10, OUTPUT);
+pinMode(9, OUTPUT);
+digitalWrite(9, LOW);
+digitalWrite(10, LOW);
+digitalWrite(11, LOW);
+delay(500);
+Wire.begin();
+
+Serial.begin (9600);
+
+///// smoothing (initializing)
+
+for (int thisReading = 0; thisReading < numReadings; thisReading++) {
+    readings1[thisReading] = 0;
+  }
+for (int thisReading = 0; thisReading < numReadings; thisReading++) {
+    readings2[thisReading] = 0;
+  }  
+for (int thisReading = 0; thisReading < numReadings; thisReading++) {
+    readings3[thisReading] = 0;
+  }
+
+for (int thisReading_ir = 0; thisReading_ir < numReadings_ir; thisReading_ir++) {
+     readings1_ir[thisReading_ir] = 0;
+  }  
+for (int thisReading2_ir = 0; thisReading2_ir < numReadings_ir; thisReading2_ir++) {
+     readings2_ir[thisReading2_ir] = 0;
+  }  
+for (int thisReading3_ir = 0; thisReading3_ir < numReadings_ir; thisReading3_ir++) {
+     readings3_ir[thisReading3_ir] = 0;
+  }      
+////// 
+
+digitalWrite(9, HIGH);
+delay(150);
+Serial.println("00");
+
+sensor.init(true);
+
+Serial.println("01");
+delay(100);
+sensor.setAddress((uint8_t)01);
+
+Serial.println("02");
+digitalWrite(10, HIGH);
+delay(150);
+
+
+sensor2.init(true);
+
+Serial.println("03");
+delay(100);
+sensor2.setAddress((uint8_t)02);
+Serial.println("04");
+digitalWrite(11, HIGH);
+delay(150);
+
+sensor3.init(true);
+
+Serial.println("05");
+delay(100);
+sensor3.setAddress((uint8_t)03);
+Serial.println("06");
+delay(100);
+
+Serial.println("addresses set");
+
+sensor.startContinuous();
+sensor2.startContinuous();
+sensor3.startContinuous();
+  
+  // put your setup code here, to run once:
+myservo1.attach(3);
+myservo2.attach(4);  ///right
+myservo3.attach(5);
+myservo4.attach(6);
+myservo5.attach(7);
+myservo6.attach(8);// left
+
+
+
+myservo1.write(90);
+myservo2.write(90);
+myservo3.write(50); // larger than 40 
+myservo4.write(150); //155 restricted
+myservo5.write(180-150+10);
+myservo6.write(90);
+delay(1000);
+}
+void sensor_data(){ /// laser distance sensor class
+a=sensor.readRangeContinuousMillimeters(); 
+if (a/10.0>50){ 
+ average1= 50.0;}
+else {average1= a/10.0;}
+
+//Serial.print(average1);
+
+//Serial.print(" ");
+
+b=sensor2.readRangeContinuousMillimeters(); 
+ if (b/10.0 > 50){ 
+    average2= 50.0;}
+else { average2= c/10.0;}
+ 
+//Serial.print(average2);
+
+//Serial.print(" ");
+
+c=sensor3.readRangeContinuousMillimeters();
+if (c/10.0 > 50){ 
+    average3= 50.0;}
+else {average3= c/10.0;}
+
+////////////////////////////////////////////moving average filter for distance sensors
+total1 = total1 - readings1[readIndex];
+  // read from the sensor:
+  readings1[readIndex] = average1;
+  // add the reading to the total:
+  total1 = total1 + readings1[readIndex];
+  // advance to the next position in the array:
+  readIndex = readIndex + 1;
+
+  // if we're at the end of the array...
+  if (readIndex >= numReadings) {
+    // ...wrap around to the beginning:
+    readIndex = 0;
+  }
+
+  // calculate the average:
+  distance1 = total1 / numReadings;
+
+total2 = total2 - readings2[readIndex2];
+  // read from the sensor:
+  readings2[readIndex2] = average2;
+  // add the reading to the total:
+  total2 = total2 + readings2[readIndex2];
+  // advance to the next position in the array:
+  readIndex2 = readIndex2 + 1;
+
+  // if we're at the end of the array...
+  if (readIndex2 >= numReadings) {
+    // ...wrap around to the beginning:
+    readIndex2 = 0;
+  }
+
+  // calculate the average:
+  distance2 = total2 / numReadings;
+  // send it to the computer as ASCII digits
+
+total3 = total3 - readings3[readIndex3];
+  // read from the sensor:
+  readings3[readIndex3] = average3;
+  // add the reading to the total:
+  total3 = total3 + readings3[readIndex3];
+  // advance to the next position in the array:
+  readIndex3 = readIndex3 + 1;
+
+  // if we're at the end of the array...
+  if (readIndex3 >= numReadings) {
+    // ...wrap around to the beginning:
+    readIndex3 = 0;
+  }
+
+  // calculate the average:
+  distance3 = total3 / numReadings;
+
+delayMicroseconds(500);///////////////////////// PD control
+float kp = 0.4;
+float kd = 0.4;
+error = distance1-distance3;
+if(error >20 || error <-20 ) { error = 0;}
+last_error = error;
+
+derivative = error-last_error;
+//integral = integral+error;
+joint1 += (error*kp) + (kd*derivative);
+
+
+if (joint1>70) {
+  joint1 = 70;}
+else if(joint1 <-70) {
+  joint1= -70;
+}
+}
+
+void inverse_forward(double x,double y,double z){ // inverse kinematics class
+theta3= acos(((x*x+y*y+z*z)-(a2*a2+a3*a3))/(2*a2*a3)); 
+theta2= (atan2(z,sqrt(x*x+y*y))+atan2(a3*sin(theta3),a2+a3*cos(theta3)));
+theta1= atan2(x,y);
+
+real_theta3= 180-acos(((x*x+y*y+z*z)-(a2*a2+a3*a3))/(2*a2*a3))*(180/M_PI); 
+real_theta2= atan2(z,sqrt(x*x+y*y))*(180/M_PI)+atan2(a3*sin(theta3),a2+a3*cos(theta3))*(180/M_PI);
+real_theta1= atan2(x,y)*(180/M_PI);
+
+ virtual_x = 6.5*cos(M_PI/2-theta1)+x;//
+ virtual_y = 6.5*sin(M_PI/2-theta1)+y;//
+
+Serial.print(x);
+Serial.print(" ");
+Serial.print(y);
+Serial.print(" ");
+Serial.print(z);
+
+Serial.print(" ");
+Serial.print(virtual_x);
+Serial.print(" ");
+Serial.print(virtual_y);
+Serial.print(" ");
+Serial.print(z);
+
+}
+
+
+void ir_sensor() { // Infrared sensor class
+ ir1= analogRead(A0);
+ ir_sensor1= ir1 *(5.0/1023.0);
+ ir2= analogRead(A1);
+ ir_sensor2= ir2*(5.0 / 1023.0);
+ ir3= analogRead(A2);
+ ir_sensor3= ir3*(5.0 / 1023.0);
+///////////////////////////////////////////moving average filter for IR3
+total1_ir = total1_ir - readings1_ir[readindex_ir];
+  // read from the sensor:
+  readings1_ir[readindex_ir] = ir_sensor1;
+  // add the reading to the total:
+  total1_ir = total1_ir + readings1_ir[readindex_ir];
+  // advance to the next position in the array:
+  readindex_ir = readindex_ir + 1;
+
+  // if we're at the end of the array...
+  if (readindex_ir >= numReadings_ir) {
+    // ...wrap around to the beginning:
+    readindex_ir = 0;
+  }
+
+  // calculate the average:
+  ir1_ave = total1_ir / numReadings_ir;
+  /////////////////////////////////////////moving average filter for IR2
+  //1---------
+total2_ir = total2_ir - readings2_ir[readindex2_ir];
+  // read from the sensor:
+  readings2_ir[readindex2_ir] = ir_sensor2;
+  // add the reading to the total:
+  total2_ir = total2_ir + readings2_ir[readindex2_ir];
+  // advance to the next position in the array:
+  readindex2_ir = readindex2_ir + 1;
+
+  // if we're at the end of the array...
+  if (readindex2_ir >= numReadings_ir) {
+    // ...wrap around to the beginning:
+    readindex2_ir = 0;
+  }
+
+  // calculate the average:
+  ir2_ave = total2_ir / numReadings_ir;
+///////////////////////////////////////////// moving average filter for IR3
+total3_ir = total3_ir - readings3_ir[readindex3_ir];
+  // read from the sensor:
+  readings3_ir[readindex3_ir] = ir_sensor3;
+  // add the reading to the total:
+  total3_ir = total3_ir + readings3_ir[readindex3_ir];
+  // advance to the next position in the array:
+  readindex3_ir = readindex3_ir + 1;
+
+  // if we're at the end of the array...
+  if (readindex3_ir >= numReadings_ir) {
+    // ...wrap around to the beginning:
+    readindex3_ir = 0;
+  }
+  // calculate the average:
+  ir3_ave = total3_ir / numReadings_ir;
+
+if(motion_plan==0){
+Serial.print (" ");
+Serial.print(5);
+Serial.print (" ");
+Serial.print(5);
+Serial.print (" ");
+Serial.println(5);
+}
+else {
+Serial.print (" ");
+Serial.print(ir1_ave);
+Serial.print (" ");
+Serial.print(ir2_ave);
+Serial.print (" ");
+Serial.println(ir3_ave);
+}
+}
+
+void loop() {
+sensor_data();
+rad_joint1= (joint1+7)*(M_PI/180); 
+inverse_forward(x,y,z); // call inverse kinematics
+ir_sensor();
+
+myservo6.write(90+real_theta1);
+myservo4.write(real_theta2+10);
+myservo5.write(180-(real_theta2+10)+10);
+myservo3.write(real_theta3);
+myservo2.write(90+(real_theta2-(190-real_theta3))-0.5);
+myservo1.write(90 - joint1);
+
+while(error > 0.6){  //limit the maximum angle of joint5
+sensor_data();
+myservo1.write(90 - joint1);  
+ 
+if (error >= 25 or error <= -25){
+break;
+}
+}
+
+if( motion_plan==0){// approach and going up <<STEP1,STEP2>>
+ 
+  if ( (y > 25 or distance2>30 ) && motion_plan==0 ){
+   motion_plan=1; 
+     z -=4;
+    }
+   else if (distance2 >5.5){
+     y+=  0.01;
+   }
+   else if (distance2 < 5.0){ 
+     y-=  0.01;      
+    }    
+   else if( distance2 >= 5.0 && distance2 <=5.5){
+      z += 0.1;
+     
+     }
+ }       
+
+else if( motion_plan==1){// right turn <<STEP3>>
+   ir_start = 1;
+  if ( (y > 25 or joint1 > 57 ) && motion_plan==1 ){
+   motion_plan=2; 
+      x -=0.18*cos( abs( -theta1 + rad_joint1))+0.5;
+       y -=0.18*sin((-theta1 + rad_joint1))+0.5;
+     //joint1 -=5;
+   }
+   else if (distance2 >4.2){
+     x+=0.02*cos( abs( -theta1 + rad_joint1+M_PI/2));
+     y+=0.02*sin((-theta1 + rad_joint1+M_PI/2));
+   }
+   else if (distance2 < 4.0){ 
+      x-=0.02*cos( abs( -theta1 + rad_joint1+M_PI/2));
+      y-=0.02*sin((-theta1 + rad_joint1+M_PI/2));      
+    }    
+   else if( distance2 >= 4.0 && distance2 <=4.2){ 
+      x +=0.06*cos( abs( -theta1 + rad_joint1));
+     y += 0.06*sin((-theta1 + rad_joint1));
+     
+     }
+ }       
+
+else if( motion_plan==2){ //left turn <<STEP4>>
+    
+    if (z <-5){while(1){ }}
+    
+    else if( (y > 25 or joint1 < -68) && motion_plan==2){ 
+    motion_plan = 3;   
+     x +=0.18*cos( abs( -theta1 + rad_joint1))+0.5;
+       y -= -0.18*sin((-theta1 + rad_joint1))+0.5;
+     //joint1 +=5; 
+     }    
+    else if ( distance2 >= 4.0 && distance2 <=4.2){
+     x -= 0.06*cos(abs(-theta1 + rad_joint1));
+     y -= 0.06*sin((-theta1 + rad_joint1));
+    }
+   else if (distance2 >4.2){
+     x+=0.02*cos( abs( -theta1 + rad_joint1+M_PI/2));
+     y+=0.02*sin((-theta1 + rad_joint1+M_PI/2));
+   }
+   else if (distance2 < 4.0){ 
+     x-=0.02*cos( abs( -theta1 + rad_joint1+M_PI/2));
+     y-=0.02*sin((-theta1 + rad_joint1+M_PI/2));    
+   } 
+}
+
+else if( motion_plan==3){// going down  <<STEP5>> 
+ motion_plan = 4;
+ while(z<-5){}  
+  //x +=4;
+  //y -=1;
+  //joint1+=5;
+for( h=0 ; h < 20; h += 1){
+  z -= 0.2;
+  //sensor_data();
+  //rad_joint1= joint1*(M_PI/180); 
+  inverse_forward(x,y,z);
+  ir_sensor();
+  myservo4.write(real_theta2+10);
+  myservo5.write(180-(real_theta2+10)+10);
+  myservo3.write(real_theta3);
+  myservo2.write(90+(real_theta2-(190-real_theta3))-0.5);
+  
+  delay(100);
+   }
+   
+ 
+}
+else if( motion_plan==4){// right turn <<STEP3>>
+
+  if (z <-5){while(1){ }}
+ 
+  else if ( (y > 25 or joint1 > 57 ) && motion_plan==4 ){
+   motion_plan=5; //down
+       x -=0.18*cos( abs( -theta1 + rad_joint1))+0.5;
+       y -=0.18*sin((-theta1 + rad_joint1))+0.5;
+ 
+   }
+   else if (distance2 >4.2){
+     x+=0.02*cos( abs( -theta1 + rad_joint1+M_PI/2));
+     y+=0.02*sin((-theta1 + rad_joint1+M_PI/2));
+   }
+   else if (distance2 < 4.0){ 
+     x-=0.02*cos( abs( -theta1 + rad_joint1+M_PI/2));
+     y-=0.02*sin((-theta1 + rad_joint1+M_PI/2));      
+    }    
+   else if( distance2 >= 4.0 && distance2 <=4.2){ 
+      x +=0.06*cos( abs( -theta1 + rad_joint1));
+     y += 0.06*sin((-theta1 + rad_joint1));
+     
+     }
+ }
+
+else if( motion_plan == 5){// going down <<STEP5>>
+   
+   motion_plan =2; //turing left
+
+  while(z <-5){ }  
+       
+  for( g=0 ; g < 20; g += 1){
+   z -= 0.2;
+  
+  inverse_forward(x,y,z);
+  ir_sensor();
+  myservo4.write(real_theta2+10);
+  myservo5.write(180-(real_theta2+10)+10);
+  myservo3.write(real_theta3);
+  myservo2.write(90+(real_theta2-(190-real_theta3))-0.5);
+  //myservo1.write(90 - joint1);
+  delay(100);
+   
+   }
+}
+}
